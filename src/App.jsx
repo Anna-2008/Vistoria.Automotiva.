@@ -1,5 +1,6 @@
 
 import { useState } from "react";
+import { supabase } from "./services/supabase";
 import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
 import { Capacitor } from "@capacitor/core";
 import "./App.css";
@@ -45,6 +46,27 @@ export default function App() {
         return;
       }
 
+      async function enviarFotoParaSupabase(fotoBlob) {
+  const nomeArquivo = `vistoria-${Date.now()}.jpg`;
+
+  const { data, error } = await supabase.storage
+    .from("fotos-camera")
+    .upload(nomeArquivo, fotoBlob, {
+      contentType: "image/jpeg",
+      upsert: false,
+    });
+
+  if (error) {
+    throw error;
+  }
+
+  const { data: urlData } = supabase.storage
+    .from("fotos-camera")
+    .getPublicUrl(data.path);
+
+  return urlData.publicUrl;
+}
+
       if (foto?.webPath) {
         setFotos((atuais) => [
           ...atuais,
@@ -87,6 +109,7 @@ export default function App() {
       `Vistoria preenchida!\n\nVeículo: ${veiculo}\nPlaca: ${placa}\nParte: ${parte || "Não informada"}\nGravidade: ${gravidade || "Não informada"}\nFotos: ${fotos.length}\n\nObservações: ${descricao || "Nenhuma"}`
     );
   }
+
 
   return (
     <div className="app">
