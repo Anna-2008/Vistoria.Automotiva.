@@ -1,4 +1,3 @@
-```yaml
 name: Construir APK Android (Capacitor)
 
 on:
