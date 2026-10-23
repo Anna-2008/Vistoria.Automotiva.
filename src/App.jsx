@@ -1,5 +1,7 @@
 
 import { useState } from "react";
+import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
+import { Capacitor } from "@capacitor/core";
 import "./App.css";
 
 export default function App() {
@@ -10,20 +12,65 @@ export default function App() {
   const [descricao, setDescricao] = useState("");
   const [fotos, setFotos] = useState([]);
 
-  function adicionarFotos(event) {
-    const arquivos = Array.from(event.target.files || []);
-    const novas = arquivos.map((arquivo) => ({
-      nome: arquivo.name,
-      url: URL.createObjectURL(arquivo),
-    }));
+  async function abrirCamera(origem) {
+    try {
+      let foto;
 
-    setFotos((atuais) => [...atuais, ...novas]);
-    event.target.value = "";
+      if (Capacitor.isNativePlatform()) {
+        foto = await Camera.getPhoto({
+          quality: 90,
+          allowEditing: true,
+          resultType: CameraResultType.Uri,
+          source: origem,
+          saveToGallery: false,
+        });
+      } else {
+        // No navegador, usa o seletor de arquivos.
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = "image/*";
+        input.capture = origem === CameraSource.Camera ? "environment" : "";
+        input.click();
+
+        input.onchange = () => {
+          const arquivo = input.files?.[0];
+          if (!arquivo) return;
+
+          const url = URL.createObjectURL(arquivo);
+          setFotos((atuais) => [
+            ...atuais,
+            { nome: arquivo.name, url },
+          ]);
+        };
+        return;
+      }
+
+      if (foto?.webPath) {
+        setFotos((atuais) => [
+          ...atuais,
+          {
+            nome: `Avaria ${atuais.length + 1}`,
+            url: foto.webPath,
+          },
+        ]);
+      }
+    } catch (erro) {
+      console.error("Erro ao abrir câmera ou galeria:", erro);
+
+      if (erro?.message) {
+        alert(`Não foi possível abrir a imagem: ${erro.message}`);
+      }
+    }
   }
 
   function removerFoto(index) {
     setFotos((atuais) => {
-      URL.revokeObjectURL(atuais[index].url);
+      const foto = atuais[index];
+
+      if (foto?.url?.startsWith("blob:")) {
+        URL.revokeObjectURL(foto.url);
+      }
+
       return atuais.filter((_, i) => i !== index);
     });
   }
@@ -37,7 +84,7 @@ export default function App() {
     }
 
     alert(
-      `Vistoria preenchida!\nVeículo: ${veiculo}\nPlaca: ${placa}\nParte: ${parte || "Não informada"}\nGravidade: ${gravidade || "Não informada"}\nFotos: ${fotos.length}`
+      `Vistoria preenchida!\n\nVeículo: ${veiculo}\nPlaca: ${placa}\nParte: ${parte || "Não informada"}\nGravidade: ${gravidade || "Não informada"}\nFotos: ${fotos.length}\n\nObservações: ${descricao || "Nenhuma"}`
     );
   }
 
@@ -48,21 +95,33 @@ export default function App() {
           <span className="brand-icon">V</span>
           <span>Vistoria <b>Auto</b></span>
         </a>
-        <span className="nav-description">Inspeção e registro de avarias veiculares</span>
-        <span className="status"><i /> Sistema online</span>
+
+        <span className="nav-description">
+          Inspeção e registro de avarias veiculares
+        </span>
+
+        <span className="status">
+          <i /> Sistema online
+        </span>
       </header>
 
       <section className="hero" id="inicio">
         <div className="hero-content">
           <span className="eyebrow">REGISTRO DE AVARIAS</span>
           <h1>Vistoria <span>Auto</span></h1>
-          <p>Registre as avarias do veículo com fotos, descrições e mantenha tudo organizado.</p>
+
+          <p>
+            Registre as avarias do veículo com fotos e descrições,
+            mantendo todas as informações organizadas.
+          </p>
+
           <div className="benefits">
             <div><span>◎</span><p>Registro<br />fotográfico</p></div>
             <div><span>◇</span><p>Mais segurança<br />no processo</p></div>
             <div><span>◷</span><p>Inspeção<br />organizada</p></div>
           </div>
         </div>
+
         <div className="hero-art">
           <div className="car-glow" />
           <div className="car-symbol">✧</div>
@@ -102,7 +161,11 @@ export default function App() {
             <div className="field-grid">
               <div>
                 <label htmlFor="parte">Parte do veículo</label>
-                <select id="parte" value={parte} onChange={(e) => setParte(e.target.value)}>
+                <select
+                  id="parte"
+                  value={parte}
+                  onChange={(e) => setParte(e.target.value)}
+                >
                   <option value="">Selecione a parte</option>
                   <option>Para-choque dianteiro</option>
                   <option>Para-choque traseiro</option>
@@ -115,9 +178,14 @@ export default function App() {
                   <option>Outra parte</option>
                 </select>
               </div>
+
               <div>
                 <label htmlFor="gravidade">Gravidade</label>
-                <select id="gravidade" value={gravidade} onChange={(e) => setGravidade(e.target.value)}>
+                <select
+                  id="gravidade"
+                  value={gravidade}
+                  onChange={(e) => setGravidade(e.target.value)}
+                >
                   <option value="">Selecione a gravidade</option>
                   <option>Leve</option>
                   <option>Moderada</option>
@@ -130,6 +198,7 @@ export default function App() {
               <label htmlFor="descricao">Descrição da avaria</label>
               <span>{descricao.length}/500</span>
             </div>
+
             <textarea
               id="descricao"
               value={descricao}
@@ -143,19 +212,29 @@ export default function App() {
               <div>
                 <h3>Fotos das avarias</h3>
                 <p>Escolha uma imagem da galeria ou utilize a câmera.</p>
-                <p className="muted">Adicione fotos nítidas para documentar os danos.</p>
+                <p className="muted">
+                  No aplicativo Android, você poderá recortar a imagem
+                  antes de adicioná-la, se o sistema oferecer essa opção.
+                </p>
               </div>
             </div>
 
             <div className="photo-actions">
-              <label className="button button-outline">
+              <button
+                type="button"
+                className="button button-outline"
+                onClick={() => abrirCamera(CameraSource.Photos)}
+              >
                 <span>▧</span> Escolher da galeria
-                <input type="file" accept="image/*" multiple onChange={adicionarFotos} hidden />
-              </label>
-              <label className="button button-primary">
+              </button>
+
+              <button
+                type="button"
+                className="button button-primary"
+                onClick={() => abrirCamera(CameraSource.Camera)}
+              >
                 <span>◎</span> Tirar foto
-                <input type="file" accept="image/*" capture="environment" onChange={adicionarFotos} hidden />
-              </label>
+              </button>
             </div>
 
             {fotos.length === 0 ? (
@@ -167,10 +246,16 @@ export default function App() {
             ) : (
               <div className="photo-grid">
                 {fotos.map((foto, index) => (
-                  <article className="photo-card" key={`${foto.nome}-${index}`}>
+                  <article
+                    className="photo-card"
+                    key={`${foto.nome}-${index}`}
+                  >
                     <img src={foto.url} alt={`Avaria ${index + 1}`} />
                     <p>{foto.nome}</p>
-                    <button type="button" onClick={() => removerFoto(index)}>
+                    <button
+                      type="button"
+                      onClick={() => removerFoto(index)}
+                    >
                       Remover imagem
                     </button>
                   </article>
@@ -192,12 +277,18 @@ export default function App() {
                 <span className="focus-corners">＋</span>
                 <div className="focus-box" />
               </div>
-              <div className="phone-controls"><span>↻</span><span>⌗</span></div>
+              <div className="phone-controls">
+                <span>↻</span><span>⌗</span>
+              </div>
             </div>
+
             <div className="crop-info">
               <span className="crop-icon">⌗</span>
               <h3>Detalhe da imagem</h3>
-              <p>Selecione uma foto para visualizar a avaria e preparar o registro.</p>
+              <p>
+                Registre os danos com fotos para documentar a inspeção
+                do veículo.
+              </p>
               <ul>
                 <li>✓ Fotos organizadas</li>
                 <li>✓ Mais precisão</li>
@@ -207,7 +298,11 @@ export default function App() {
           </section>
 
           <section className="panel tips-panel">
-            <div className="tips-title"><span>◇</span><h3>Dicas para uma boa vistoria</h3></div>
+            <div className="tips-title">
+              <span>◇</span>
+              <h3>Dicas para uma boa vistoria</h3>
+            </div>
+
             <div className="tip"><span>◎</span><p>Tire fotos com boa iluminação</p></div>
             <div className="tip"><span>▧</span><p>Mostre os detalhes da avaria</p></div>
             <div className="tip"><span>▤</span><p>Descreva o dano com clareza</p></div>
